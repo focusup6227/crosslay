@@ -1,7 +1,9 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthProvider'
 import { SignIn } from './auth/SignIn'
+import { ConfigError } from './auth/ConfigError'
 import { Onboarding } from './auth/Onboarding'
+import { isSupabaseConfigured } from './lib/supabase'
 import { AppShell } from './shell/AppShell'
 import { MapScreen } from './screens/MapScreen'
 import { SearchScreen } from './screens/SearchScreen'
@@ -36,6 +38,8 @@ function Gate() {
 }
 
 export default function App() {
+  if (!isSupabaseConfigured) return <ConfigError />
+
   return (
     <BrowserRouter>
       <AuthProvider>
