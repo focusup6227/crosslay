@@ -1,15 +1,32 @@
 # HANDOFF — Crosslay
 
-_Last updated: 2026-06-10 (session 1)_
+_Last updated: 2026-06-10 (session 2)_
 
 ## Current state
 
-**Phase 1 (Foundation) is code-complete; awaiting Supabase project + user testing.**
+**Phase 1 (Foundation) + Phase 2 (Preplans) are code-complete; awaiting Supabase project + user testing.**
 
 - `supabase/migrations/0001_init.sql` — full schema, RLS, triggers, onboarding RPCs, storage buckets + policies. **Not yet applied** — needs a Supabase project.
 - Vite + React + TS + Tailwind v4 scaffold; `npm run build` passes.
 - Auth flow: magic-link sign-in → onboarding (join via invite code OR create department → admin) → app shell.
-- App shell: bottom tabs (Map/Search/Add) on mobile, top-bar nav on `md+`; screens are Phase 2/3 placeholders.
+- App shell: bottom tabs (Map/Search/Add) on mobile, top-bar nav on `md+`.
+- **Hardening (session 2):** Supabase client no longer throws at module load when env vars are missing — `App` gates on `supabaseConfigError` and shows a readable notice; root `ErrorBoundary` in `main.tsx`; `vercel.json` SPA rewrite so deep links / shared `/preplan/:id` URLs don't 404.
+
+### Phase 2 — Preplans (session 2)
+
+- **Create/edit form** (`src/components/PreplanForm.tsx`, screens `AddScreen`/`EditScreen`): address, building name, occupancy (with suggestions datalist), repeatable contacts, hazards, notes, last-reviewed date, and create-time PDF upload. **Pin:** Nominatim geocode (`src/lib/geo.ts`, "Locate address" button — deliberately button-triggered to respect Nominatim's ~1 req/s policy) + manual lat/lng override. Drag-on-map deferred to Phase 3 (no maplibre dep yet — owner-confirmed).
+- **Preplan detail** (`src/screens/PreplanDetail.tsx`) — the product screen: hazards rendered first/loud, tap-to-call contacts (`tel:`), notes, location (lat/lng + "open in map"), photo grid, in-app PDF viewer. Edit button; admin-only delete (preplan + per-photo/-doc).
+- **PDF viewing** (`src/components/PdfViewer.tsx`): in-app `react-pdf` (pdfjs worker bundled locally, no CDN) + "Open PDF" fallback link — owner-confirmed. Lazy-loaded so pdfjs (~420 kB) stays out of the Map/Search/Add bundle.
+- **Photo upload** (`src/components/PhotoUploader.tsx`): camera/library, multi-select, required per-photo caption, client-side canvas compression (long edge ≤1600px, JPEG q0.8) before upload — no extra dep.
+- **Search** (`src/screens/SearchScreen.tsx`): debounced (250ms) type-ahead `ILIKE` over address + building name; recently-viewed list (localStorage, `src/lib/recents.ts`) when the box is empty.
+- **Storage** (`src/lib/storage.ts`): uploads to `preplan-pdfs`/`preplan-photos` under `{department_id}/{preplan_id}/{uuid}-{name}`; columns store the object **path**, views render short-lived (1h) **signed URLs** on demand (offline-cache-friendly later).
+- **New dependency:** `react-pdf` (pre-approved as "pdf.js (or react-pdf)").
+
+### ⚠️ To verify during live testing (couldn't test without a Supabase project)
+
+- **`geom` round-trip over PostgREST.** Writes send EWKT (`SRID=4326;POINT(lng lat)`); reads assume PostgREST serializes the geometry column to GeoJSON. `lngLatFromGeom` also tolerates GeoJSON-as-string and WKT, but if Supabase returns raw hex EWKB the pin just won't render (no crash) — confirm a created preplan's lat/lng shows on the detail screen.
+- **Storage RLS path match** — uploads must land under the user's `department_id` first segment; confirm a photo/PDF uploads and the signed URL renders.
+- Deleting a preplan cascades document/photo **rows** but leaves their **storage objects** orphaned (per-item delete does remove the object). Acceptable for MVP; a cleanup pass can come later.
 
 ## Decisions made (owner-confirmed 2026-06-10)
 
@@ -54,6 +71,7 @@ _Last updated: 2026-06-10 (session 1)_
 
 ## What's next
 
-- **Phase 2**: preplan create/edit form (Nominatim geocode + drag pin), detail view (the product!), photo upload w/ compression, search + recents.
-- Need from owner: Supabase project URL + anon key; confirmation Phase 1 flow works on his phone.
-- Pending: Shelby County TN hydrant-data research results (background agent, session 1) — fold findings into Phase 4 import planning.
+- **Phase 3 (Map)**: MapLibre map with preplan pins (tap → bottom-sheet preview → detail), clustering, locate-me; toggleable hydrant layer color-coded by flow class (OOS = slashed/red); nearest-5 hydrants on preplan detail via the existing `nearest_hydrants` RPC. This is also where the form's **drag-to-place pin** lands (deferred from Phase 2).
+- **Phase 4 (Importers)**: bulk preplan CSV+PDF import; hydrant GeoJSON + OSM-bbox import (see hydrant research above).
+- **Phase 5 (Polish)**: PWA manifest + service worker, empty/loading/error states, dev seed script.
+- Need from owner: Supabase project URL + anon key (locally **and** in Vercel); confirmation the Phase 1 + Phase 2 flows work on his phone (see "To verify during live testing" above).

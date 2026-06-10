@@ -6,6 +6,8 @@ import { AppShell } from './shell/AppShell'
 import { MapScreen } from './screens/MapScreen'
 import { SearchScreen } from './screens/SearchScreen'
 import { AddScreen } from './screens/AddScreen'
+import { EditScreen } from './screens/EditScreen'
+import { PreplanDetail } from './screens/PreplanDetail'
 import { supabaseConfigError } from './lib/supabase'
 
 function ConfigNotice({ message }: { message: string }) {
@@ -44,6 +46,8 @@ function Gate() {
         <Route path="/map" element={<MapScreen />} />
         <Route path="/search" element={<SearchScreen />} />
         <Route path="/add" element={<AddScreen />} />
+        <Route path="/preplan/:id" element={<PreplanDetail />} />
+        <Route path="/preplan/:id/edit" element={<EditScreen />} />
         <Route path="*" element={<Navigate to="/map" replace />} />
       </Route>
     </Routes>
