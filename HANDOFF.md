@@ -18,7 +18,7 @@ _Last updated: 2026-06-10 (session 1)_
 3. **Edit rights** — any department member can edit any preplan; deletes remain admin-only.
 4. **No unique address constraint** — suites/strip-mall units file as separate preplans.
 5. **react-router-dom approved** as a dependency (shareable `/preplan/:id` URLs matter).
-6. Hydrant data source for owner's county (Shelby County, TN) under research — see "Hydrant data" below when populated.
+6. Hydrant data source for owner's county (Shelby County, TN) — researched 2026-06-10, see "Hydrant data — Shelby County TN" below.
 
 ## Architecture notes
 
@@ -42,6 +42,15 @@ _Last updated: 2026-06-10 (session 1)_
 3. Sign in with magic link → "Start new" → create your department (check `profiles.role = 'admin'`, department has `invite_code`).
 4. Second account (different email) → "Join department" with the code → lands in shell as member.
 5. Verify RLS: as member, try `update profiles set role='admin'` from the JS console — should fail.
+
+## Hydrant data — Shelby County TN (researched 2026-06-10)
+
+- **OSM is NOT viable locally**: Overpass count found only ~48 `emergency=fire_hydrant` nodes in the whole county bbox. Build the OSM importer anyway (other departments), but owner needs a GIS source.
+- **Memphis FD hydrant FeatureServer exists**: `https://comgis1.memphistn.gov/arcgis/rest/services/AGO_Fire/MFD_Hydrants/FeatureServer` — Google-indexed; layer 2 is a "Fire Hydrant Maintenance Table" with Hydrant IDs (stable IDs exist). Server WAF-blocks non-browser clients (curl/fetch refused); owner should try it in a regular browser, and if layer 0 is public: append `/0/query?where=1%3D1&outFields=*&f=geojson` to export GeoJSON directly — which our Phase 4 importer will accept.
+- **MLGW** (runs the water system county-wide) tracks hydrants in enterprise ArcGIS/ArcFM; no public hydrant layer found. They do publish public viewers at `webgisr.mlgw.org`, so publishing is possible — path is a data request via MLGW Land & Mapping (mlgw.com/builders/landandmapping).
+- **ReGIS** (Shelby County regional GIS consortium, gis.shelbycountytn.gov) shares layers via a Cooperative GIS Data Sharing Agreement; REST directory is 403 to the public. Fire departments are the textbook member agency — owner's department may already have access.
+- **Memphis Data Hub** (data.memphistn.gov) has a "Fire Hydrant Flushing" story page but no confirmed downloadable hydrant point dataset (portal is JS-rendered; needs a manual browse).
+- **Import-path implication**: prioritize the GeoJSON importer for ArcGIS exports; hydrant IDs from MFD/MLGW map to `external_id` for re-import dedup.
 
 ## What's next
 
