@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme {
+  /* Crosslay design tokens — dark base, hi-viz safety yellow-green accent.
+     Red is reserved strictly for out-of-service / urgent states. */
+  --font-display: "Oswald", "Arial Narrow", sans-serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+
+  --color-night-950: #07090b;
+  --color-night-900: #0d1117;
+  --color-night-800: #151b22;
+  --color-night-700: #20282f;
+  --color-night-600: #2e3a44;
+
+  --color-ash-100: #f1f5f8;
+  --color-ash-300: #c3ccd3;
+  --color-ash-500: #8b99a3;
+
+  --color-hiviz-300: #e3ff70;
+  --color-hiviz-400: #cdff3d;
+  --color-hiviz-600: #93b81c;
+
+  --color-oos-400: #ff5147;
+  --color-oos-600: #c81e14;
+}
+
+html {
+  background-color: var(--color-night-900);
+  color: var(--color-ash-100);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* One-handed reach: keep interactive elements >= 48px touch targets */
+button, a, input, select, textarea {
+  touch-action: manipulation;
+}
