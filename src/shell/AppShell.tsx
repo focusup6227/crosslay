@@ -5,6 +5,7 @@ const TABS = [
   { to: '/map', label: 'Map', icon: MapIcon },
   { to: '/search', label: 'Search', icon: SearchIcon },
   { to: '/add', label: 'Add', icon: PlusIcon },
+  { to: '/station', label: 'Station', icon: StationIcon },
 ]
 
 export function AppShell() {
@@ -47,7 +48,7 @@ export function AppShell() {
       </main>
 
       {/* Bottom tab bar — mobile only, big one-handed targets */}
-      <nav className="fixed inset-x-0 bottom-0 grid grid-cols-3 border-t border-night-700 bg-night-950 pb-[env(safe-area-inset-bottom)] md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 grid grid-cols-4 border-t border-night-700 bg-night-950 pb-[env(safe-area-inset-bottom)] md:hidden">
         {TABS.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
@@ -91,6 +92,16 @@ function PlusIcon() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
       <path d="M12 5v14M5 12h14" />
+    </svg>
+  )
+}
+
+function StationIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 10.5 12 4l9 6.5" />
+      <path d="M5 9.5V20h14V9.5" />
+      <path d="M9 20v-7h6v7" />
     </svg>
   )
 }
