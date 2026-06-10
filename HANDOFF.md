@@ -4,9 +4,13 @@ _Last updated: 2026-06-10 (session 1)_
 
 ## Current state
 
-**Phase 1 (Foundation) is code-complete; awaiting Supabase project + user testing.**
+**Phase 1 (Foundation) is code-complete; DB is live; awaiting user testing on phone.**
 
-- `supabase/migrations/0001_init.sql` — full schema, RLS, triggers, onboarding RPCs, storage buckets + policies. **Not yet applied** — needs a Supabase project.
+- Supabase project `pokcedxsywpezhrqmbhh` (https://pokcedxsywpezhrqmbhh.supabase.co); MCP wired via `.mcp.json`.
+- `supabase/migrations/0001_init.sql` **applied 2026-06-10** (single `init` entry in remote migration history). Revised during apply: PostGIS/pg_trgm moved to `extensions` schema (clears the `spatial_ref_sys` RLS lint), explicit Data API grants (legacy auto-grant ALL revoked from `anon`/`authenticated`; anon now has zero table/RPC access), trigger functions not RPC-callable, all functions have pinned `search_path`.
+- `.env.local` populated (publishable `sb_publishable_…` key, not legacy anon JWT). Security advisors clean except intentional WARNs: the 4 authenticated-callable security-definer RPCs/helpers, and "leaked password protection".
+- Sign-in supports magic link AND email+password (sign in / create account tabs in `SignIn.tsx`); onboarding explicitly navigates to `/map` after create/join.
+- **Manual dashboard steps still needed**: Auth → URL Configuration → add `http://localhost:5173` (Site URL or redirect allowlist) for magic-link/confirmation redirects; Auth → Providers → consider enabling leaked-password protection (HaveIBeenPwned) now that password sign-up exists. New password sign-ups get a confirmation email by default (Auth → Providers → Email to change).
 - Vite + React + TS + Tailwind v4 scaffold; `npm run build` passes.
 - Auth flow: magic-link sign-in → onboarding (join via invite code OR create department → admin) → app shell.
 - App shell: bottom tabs (Map/Search/Add) on mobile, top-bar nav on `md+`; screens are Phase 2/3 placeholders.

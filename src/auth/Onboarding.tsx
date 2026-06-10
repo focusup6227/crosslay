@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthProvider'
 
@@ -7,6 +8,7 @@ type Mode = 'join' | 'create'
 
 export function Onboarding() {
   const { refreshProfile, signOut } = useAuth()
+  const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('join')
   const [displayName, setDisplayName] = useState('')
   const [code, setCode] = useState('')
@@ -38,6 +40,7 @@ export function Onboarding() {
       if (rpcErr) throw rpcErr
 
       await refreshProfile()
+      navigate('/map', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong — try again')
     } finally {

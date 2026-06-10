@@ -8,8 +8,9 @@
 --   * No unique constraint on address (suites file separately)
 -- ============================================================
 
-create extension if not exists postgis;
-create extension if not exists pg_trgm;
+-- extensions live outside public so spatial_ref_sys etc. are not API-exposed
+create extension if not exists postgis with schema extensions;
+create extension if not exists pg_trgm with schema extensions;
 
 -- ---------- Core tables ----------
 
@@ -56,7 +57,7 @@ create table public.preplans (
   address        text not null,
   building_name  text,
   occupancy_type text,
-  geom           geometry(Point, 4326),
+  geom           extensions.geometry(Point, 4326),
   contacts       jsonb not null default '[]',
   hazards        text,
   notes          text,
@@ -81,7 +82,7 @@ create table public.preplan_photos (
   preplan_id uuid not null references public.preplans(id) on delete cascade,
   photo_url  text not null,
   caption    text,
-  geom       geometry(Point, 4326),
+  geom       extensions.geometry(Point, 4326),
   created_by uuid not null default auth.uid() references public.profiles(id),
   created_at timestamptz not null default now()
 );
@@ -90,7 +91,7 @@ create table public.hydrants (
   id             uuid primary key default gen_random_uuid(),
   department_id  uuid not null default public.current_department_id()
                    references public.departments(id),
-  geom           geometry(Point, 4326) not null,
+  geom           extensions.geometry(Point, 4326) not null,
   flow_gpm       integer,
   flow_class     text check (flow_class in ('blue','green','orange','red')),
   main_size      text,
@@ -108,8 +109,8 @@ create table public.hydrants (
 
 create index preplans_dept_idx           on public.preplans (department_id);
 create index preplans_geom_idx           on public.preplans using gist (geom);
-create index preplans_address_trgm       on public.preplans using gin (address gin_trgm_ops);
-create index preplans_bldg_trgm          on public.preplans using gin (building_name gin_trgm_ops);
+create index preplans_address_trgm       on public.preplans using gin (address extensions.gin_trgm_ops);
+create index preplans_bldg_trgm          on public.preplans using gin (building_name extensions.gin_trgm_ops);
 create index preplan_documents_plan_idx  on public.preplan_documents (preplan_id);
 create index preplan_photos_plan_idx     on public.preplan_photos (preplan_id);
 create index hydrants_dept_idx           on public.hydrants (department_id);
@@ -121,7 +122,7 @@ create unique index hydrants_dedup_idx   on public.hydrants (department_id, sour
 -- ---------- Triggers ----------
 
 create or replace function public.touch_updated_at()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 begin
   new.updated_at := now();
   return new;
@@ -134,7 +135,7 @@ create trigger hydrants_touch before update on public.hydrants
 
 -- derive NFPA 291 flow class whenever flow_gpm is present
 create or replace function public.derive_flow_class()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 begin
   if new.flow_gpm is not null then
     new.flow_class := case
@@ -152,7 +153,7 @@ create trigger hydrants_flow_class before insert or update on public.hydrants
 
 -- members may only change status fields on hydrants; everything else is admin-only
 create or replace function public.guard_hydrant_update()
-returns trigger language plpgsql security definer set search_path = public as $$
+returns trigger language plpgsql security definer set search_path = public, extensions as $$
 begin
   if not public.is_admin() then
     if new.geom::text is distinct from old.geom::text
@@ -262,7 +263,7 @@ returns table (
   id uuid, distance_ft numeric, flow_gpm integer, flow_class text,
   status text, status_note text, main_size text, lng double precision, lat double precision
 )
-language sql stable security invoker set search_path = public as $$
+language sql stable security invoker set search_path = public, extensions as $$
   select h.id,
          round((st_distance(h.geom::geography, p.geom::geography) * 3.28084)::numeric, 0),
          h.flow_gpm, h.flow_class, h.status, h.status_note, h.main_size,
@@ -273,6 +274,28 @@ language sql stable security invoker set search_path = public as $$
    order by h.geom <-> p.geom
    limit p_limit
 $$;
+
+-- ---------- Function execute grants ----------
+-- Postgres grants EXECUTE to PUBLIC by default; tighten so trigger/helper
+-- functions are not callable via /rest/v1/rpc and RPCs require sign-in.
+
+revoke execute on function public.touch_updated_at()      from public, anon, authenticated;
+revoke execute on function public.derive_flow_class()     from public, anon, authenticated;
+revoke execute on function public.guard_hydrant_update()  from public, anon, authenticated;
+revoke execute on function public.handle_new_user()       from public, anon, authenticated;
+revoke execute on function public.guard_profile_update()  from public, anon, authenticated;
+
+revoke execute on function public.current_department_id()           from public, anon;
+revoke execute on function public.is_admin()                        from public, anon;
+revoke execute on function public.create_department(text)           from public, anon;
+revoke execute on function public.join_department(text)             from public, anon;
+revoke execute on function public.nearest_hydrants(uuid, int)       from public, anon;
+
+grant execute on function public.current_department_id()      to authenticated;
+grant execute on function public.is_admin()                    to authenticated;
+grant execute on function public.create_department(text)       to authenticated;
+grant execute on function public.join_department(text)         to authenticated;
+grant execute on function public.nearest_hydrants(uuid, int)   to authenticated;
 
 -- ---------- Row Level Security ----------
 
@@ -351,6 +374,22 @@ create policy hydrants_update on public.hydrants for update to authenticated
   with check (department_id = public.current_department_id());
 create policy hydrants_delete on public.hydrants for delete to authenticated
   using (department_id = public.current_department_id() and public.is_admin());
+
+-- ---------- Data API grants ----------
+-- Grant only what RLS permits; anon gets nothing (app is authenticated-only,
+-- onboarding goes through security-definer RPCs). The revoke clears legacy
+-- default privileges on projects that still auto-grant ALL to API roles.
+
+revoke all on public.departments, public.profiles, public.preplans,
+              public.preplan_documents, public.preplan_photos, public.hydrants
+  from anon, authenticated;
+
+grant select, update                 on public.departments       to authenticated;
+grant select, update                 on public.profiles          to authenticated;
+grant select, insert, update, delete on public.preplans          to authenticated;
+grant select, insert, delete         on public.preplan_documents to authenticated;
+grant select, insert, delete         on public.preplan_photos    to authenticated;
+grant select, insert, update, delete on public.hydrants          to authenticated;
 
 -- ---------- Storage ----------
 -- Path convention: {department_id}/{preplan_id}/{filename}
