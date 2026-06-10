@@ -24,12 +24,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
     if (error) {
       console.error('Failed to load profile', error)
       setProfile(null)
-    } else {
+      return
+    }
+    if (data) {
       setProfile(data as Profile)
+      return
+    }
+    // no profile row (signup trigger missed or row lost) — have the server recreate it
+    const { data: healed, error: healErr } = await supabase.rpc('ensure_profile')
+    if (healErr) {
+      console.error('Failed to create profile', healErr)
+      setProfile(null)
+    } else {
+      setProfile(healed as Profile)
     }
   }, [])
 
