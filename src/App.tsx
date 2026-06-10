@@ -6,6 +6,21 @@ import { AppShell } from './shell/AppShell'
 import { MapScreen } from './screens/MapScreen'
 import { SearchScreen } from './screens/SearchScreen'
 import { AddScreen } from './screens/AddScreen'
+import { supabaseConfigError } from './lib/supabase'
+
+function ConfigNotice({ message }: { message: string }) {
+  return (
+    <div className="flex min-h-dvh flex-col items-center justify-center px-6 text-center">
+      <h1 className="font-display text-4xl font-bold uppercase tracking-wide text-hiviz-400">
+        Crosslay
+      </h1>
+      <div className="mt-8 w-full max-w-sm rounded-lg border border-oos-600 bg-night-800 p-6">
+        <p className="text-xl font-semibold text-oos-400">Not configured</p>
+        <p className="mt-3 text-ash-300">{message}</p>
+      </div>
+    </div>
+  )
+}
 
 function Gate() {
   const { session, profile, loading } = useAuth()
@@ -36,6 +51,10 @@ function Gate() {
 }
 
 export default function App() {
+  // Gate the whole tree before anything touches Supabase, so a misconfigured
+  // deploy shows this notice instead of white-screening.
+  if (supabaseConfigError) return <ConfigNotice message={supabaseConfigError} />
+
   return (
     <BrowserRouter>
       <AuthProvider>
