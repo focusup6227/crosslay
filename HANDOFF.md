@@ -4,7 +4,18 @@ _Last updated: 2026-06-10 (session 1)_
 
 ## Current state
 
-**Phase 1 (Foundation) is code-complete; DB is live; awaiting user testing on phone.**
+**Phase 2 (Preplans) is code-complete. Shifts/stations shipped between phases. Awaiting user testing.**
+
+Phase 2 + shifts (2026-06-10, session 2):
+
+- **Stations & shifts**: department → stations → shifts (A/B/C…) hierarchy (migrations 0003+0004). `profiles.shift_id`; admins create stations/shifts and assign crew on the Station tab; members cannot self-assign. `shift_notes` board at `/shift` is RLS-private to the shift (verified with a simulated-JWT test). Station tab also has readiness tiles, OOS/review queues, roster, invite code.
+- **Preplan form** (`/add`, `/preplan/:id/edit`): Nominatim geocode → draggable MapLibre pin (lazy-loaded chunk), contacts rows, hazards/notes, multi-PDF upload to `preplan-pdfs`.
+- **Preplan detail** (`/preplan/:id`): hazards block first, tap-to-call contacts, inline PDF `<object>` viewer + "Open PDF" fallback, photo grid, photo upload with required captions + canvas JPEG compression (max 1600px), "Mark reviewed today", admin delete.
+- **Search**: 250ms-debounced ILIKE over address+building name; localStorage recents when the box is empty.
+- Migration 0005: `lat`/`lng` computed columns (PostgREST returns raw geometry as WKB hex; client selects `'*, lat, lng'`). Writes use EWKT strings (`SRID=4326;POINT(lng lat)`).
+- Known gap: deleting a preplan cascades DB rows but orphans its Storage objects (cleanup pass later, or a pg_cron sweep).
+
+Phase 1 (Foundation) — DB live:
 
 - Supabase project `pokcedxsywpezhrqmbhh` (https://pokcedxsywpezhrqmbhh.supabase.co); MCP wired via `.mcp.json`.
 - `supabase/migrations/0001_init.sql` **applied 2026-06-10** (single `init` entry in remote migration history). Revised during apply: PostGIS/pg_trgm moved to `extensions` schema (clears the `spatial_ref_sys` RLS lint), explicit Data API grants (legacy auto-grant ALL revoked from `anon`/`authenticated`; anon now has zero table/RPC access), trigger functions not RPC-callable, all functions have pinned `search_path`.
@@ -56,8 +67,14 @@ _Last updated: 2026-06-10 (session 1)_
 - **Memphis Data Hub** (data.memphistn.gov) has a "Fire Hydrant Flushing" story page but no confirmed downloadable hydrant point dataset (portal is JS-rendered; needs a manual browse).
 - **Import-path implication**: prioritize the GeoJSON importer for ArcGIS exports; hydrant IDs from MFD/MLGW map to `external_id` for re-import dedup.
 
+## How to test Phase 2
+
+1. Add tab → fill address → "Find on map" → drag pin onto the building → add a contact + hazards → attach a PDF → Create.
+2. Detail view: tap the contact (should open the dialer), open the PDF inline and via "Open PDF", add 2 photos from camera roll (captions required), Mark reviewed today.
+3. Search tab: type a fragment of the address and of the building name; clear the box → the preplan should sit in Recently viewed.
+4. Edit: change hazards, add a second PDF. As admin, delete a PDF and a photo.
+
 ## What's next
 
-- **Phase 2**: preplan create/edit form (Nominatim geocode + drag pin), detail view (the product!), photo upload w/ compression, search + recents.
-- Need from owner: Supabase project URL + anon key; confirmation Phase 1 flow works on his phone.
-- Pending: Shelby County TN hydrant-data research results (background agent, session 1) — fold findings into Phase 4 import planning.
+- **Phase 3 (Map)**: MapLibre district map (PinMap chunk already split out), preplan pins + clustering + bottom-sheet preview, hydrant layer color-coded by flow class, "Mark out of service" action, nearest-hydrants on detail (RPC already exists).
+- Pending: fold Shelby County hydrant-data findings (below) into Phase 4 import planning.

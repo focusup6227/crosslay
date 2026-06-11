@@ -5,8 +5,10 @@ import { Onboarding } from './auth/Onboarding'
 import { AppShell } from './shell/AppShell'
 import { MapScreen } from './screens/MapScreen'
 import { SearchScreen } from './screens/SearchScreen'
-import { AddScreen } from './screens/AddScreen'
 import { StationScreen } from './screens/StationScreen'
+import { ShiftScreen } from './screens/ShiftScreen'
+import { PreplanFormScreen } from './screens/PreplanFormScreen'
+import { PreplanDetailScreen } from './screens/PreplanDetailScreen'
 import { supabaseConfigError } from './lib/supabase'
 
 function ConfigNotice({ message }: { message: string }) {
@@ -44,8 +46,11 @@ function Gate() {
       <Route element={<AppShell />}>
         <Route path="/map" element={<MapScreen />} />
         <Route path="/search" element={<SearchScreen />} />
-        <Route path="/add" element={<AddScreen />} />
+        <Route path="/add" element={<PreplanFormScreen />} />
         <Route path="/station" element={<StationScreen />} />
+        <Route path="/shift" element={<ShiftScreen />} />
+        <Route path="/preplan/:id" element={<PreplanDetailScreen />} />
+        <Route path="/preplan/:id/edit" element={<PreplanFormScreen />} />
         <Route path="*" element={<Navigate to="/map" replace />} />
       </Route>
     </Routes>

@@ -12,6 +12,29 @@ export interface Profile {
   display_name: string | null
   department_id: string | null
   role: Role
+  shift_id: string | null
+  created_at: string
+}
+
+export interface Station {
+  id: string
+  department_id: string
+  name: string
+  created_at: string
+}
+
+export interface Shift {
+  id: string
+  station_id: string
+  name: string
+  created_at: string
+}
+
+export interface ShiftNote {
+  id: string
+  shift_id: string
+  body: string
+  created_by: string
   created_at: string
 }
 

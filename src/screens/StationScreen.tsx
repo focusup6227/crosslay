@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../auth/AuthProvider'
@@ -8,6 +9,18 @@ interface RosterRow {
   id: string
   display_name: string | null
   role: Role
+  shift_id: string | null
+}
+
+interface StationRow {
+  id: string
+  name: string
+}
+
+interface ShiftRow {
+  id: string
+  station_id: string
+  name: string
 }
 
 interface ReviewDueRow {
@@ -27,6 +40,8 @@ interface OosHydrantRow {
 interface DashData {
   department: Department
   roster: RosterRow[]
+  stations: StationRow[]
+  shifts: ShiftRow[]
   preplanCount: number
   reviewDue: ReviewDueRow[]
   reviewDueCount: number
@@ -38,18 +53,21 @@ interface DashData {
 const REVIEW_CYCLE_DAYS = 365
 
 export function StationScreen() {
-  const { profile } = useAuth()
+  const { profile, refreshProfile } = useAuth()
   const [data, setData] = useState<DashData | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const load = useCallback(async (departmentId: string) => {
     const cutoff = new Date(Date.now() - REVIEW_CYCLE_DAYS * 86400000)
       .toISOString()
       .slice(0, 10)
 
-    const [dept, roster, planCount, due, hydrantCount, oos] = await Promise.all([
+    const [dept, roster, stations, shifts, planCount, due, hydrantCount, oos] = await Promise.all([
       supabase.from('departments').select('*').eq('id', departmentId).single(),
-      supabase.from('profiles').select('id, display_name, role').order('display_name'),
+      supabase.from('profiles').select('id, display_name, role, shift_id').order('display_name'),
+      supabase.from('stations').select('id, name').order('name'),
+      supabase.from('shifts').select('id, station_id, name').order('name'),
       supabase.from('preplans').select('id', { count: 'exact', head: true }),
       supabase
         .from('preplans')
@@ -66,12 +84,15 @@ export function StationScreen() {
     ])
 
     const firstError =
-      dept.error ?? roster.error ?? planCount.error ?? due.error ?? hydrantCount.error ?? oos.error
+      dept.error ?? roster.error ?? stations.error ?? shifts.error ??
+      planCount.error ?? due.error ?? hydrantCount.error ?? oos.error
     if (firstError) throw firstError
 
     setData({
       department: dept.data as Department,
       roster: (roster.data ?? []) as RosterRow[],
+      stations: (stations.data ?? []) as StationRow[],
+      shifts: (shifts.data ?? []) as ShiftRow[],
       preplanCount: planCount.count ?? 0,
       reviewDue: (due.data ?? []) as ReviewDueRow[],
       reviewDueCount: due.count ?? 0,
@@ -81,6 +102,11 @@ export function StationScreen() {
     })
   }, [])
 
+  const refresh = useCallback(async () => {
+    if (!profile?.department_id) return
+    await load(profile.department_id)
+  }, [profile?.department_id, load])
+
   useEffect(() => {
     if (!profile?.department_id) return
     setError(null)
@@ -89,6 +115,20 @@ export function StationScreen() {
       setError('Could not load the station board — pull to refresh or try again.')
     })
   }, [profile?.department_id, load])
+
+  async function assignShift(memberId: string, shiftId: string | null) {
+    setActionError(null)
+    const { error: err } = await supabase
+      .from('profiles')
+      .update({ shift_id: shiftId })
+      .eq('id', memberId)
+    if (err) {
+      setActionError(err.message)
+      return
+    }
+    if (memberId === profile?.id) await refreshProfile()
+    await refresh().catch(() => {})
+  }
 
   if (error) {
     return (
@@ -100,8 +140,21 @@ export function StationScreen() {
 
   if (!data) return <StationSkeleton />
 
-  const { department, roster, preplanCount, reviewDue, reviewDueCount, hydrantCount, oosHydrants, oosCount } = data
+  const {
+    department, roster, stations, shifts, preplanCount,
+    reviewDue, reviewDueCount, hydrantCount, oosHydrants, oosCount,
+  } = data
+  const isAdmin = profile?.role === 'admin'
   const inService = hydrantCount - oosCount
+  const myShift = shifts.find((s) => s.id === profile?.shift_id) ?? null
+  const myStation = myShift ? stations.find((st) => st.id === myShift.station_id) ?? null : null
+
+  const shiftLabel = (shiftId: string | null) => {
+    const shift = shifts.find((s) => s.id === shiftId)
+    if (!shift) return null
+    const station = stations.find((st) => st.id === shift.station_id)
+    return station ? `${station.name} · ${shift.name}` : shift.name
+  }
 
   return (
     <div className="mx-auto w-full max-w-3xl">
@@ -121,13 +174,19 @@ export function StationScreen() {
         </h2>
         <p className="mt-1 text-sm text-ash-500">
           {roster.length} {roster.length === 1 ? 'member' : 'members'} · you are{' '}
-          <span className={profile?.role === 'admin' ? 'font-semibold text-hiviz-400' : 'text-ash-300'}>
+          <span className={isAdmin ? 'font-semibold text-hiviz-400' : 'text-ash-300'}>
             {profile?.role}
           </span>
         </p>
       </header>
 
       <div className="space-y-8 px-4 py-6">
+        {actionError && (
+          <p className="rounded-lg border border-oos-600 bg-night-800 px-4 py-3 text-oos-400">
+            {actionError}
+          </p>
+        )}
+
         {/* Readiness board — hairline grid, big numerals */}
         <section aria-label="Readiness">
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-night-700 bg-night-700 md:grid-cols-4">
@@ -139,6 +198,66 @@ export function StationScreen() {
             />
             <StatTile label="Out of service" value={oosCount} alert={oosCount > 0} />
           </div>
+        </section>
+
+        {/* Your shift — gateway to the private board */}
+        <section aria-label="Your shift">
+          {myShift ? (
+            <Link
+              to="/shift"
+              className="flex items-center justify-between gap-3 rounded-lg border border-night-700 bg-night-800 px-4 py-4 hover:border-hiviz-400"
+            >
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-ash-500">
+                  Your shift
+                </p>
+                <p className="mt-1 truncate font-display text-xl font-semibold uppercase tracking-wide text-ash-100">
+                  {myStation ? `${myStation.name} · ${myShift.name}` : myShift.name}
+                </p>
+              </div>
+              <span className="shrink-0 font-display text-sm font-semibold uppercase tracking-wide text-hiviz-400">
+                Open board →
+              </span>
+            </Link>
+          ) : (
+            <div className="rounded-lg border border-dashed border-night-600 px-4 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-ash-500">
+                Your shift
+              </p>
+              <p className="mt-1 text-ash-300">
+                Not assigned yet.{' '}
+                {isAdmin
+                  ? 'Add a station and shifts below, then assign yourself in the crew list.'
+                  : 'Ask your department admin to assign you.'}
+              </p>
+            </div>
+          )}
+        </section>
+
+        {/* Stations + shifts */}
+        <section aria-label="Stations">
+          <SectionHeading>Stations</SectionHeading>
+          {stations.length === 0 && !isAdmin && (
+            <p className="mt-3 rounded-lg border border-night-700 bg-night-800 px-4 py-4 text-ash-500">
+              No stations yet.
+            </p>
+          )}
+          {stations.length > 0 && (
+            <ul className="mt-3 space-y-3">
+              {stations.map((st) => (
+                <StationCard
+                  key={st.id}
+                  station={st}
+                  shifts={shifts.filter((s) => s.station_id === st.id)}
+                  roster={roster}
+                  isAdmin={isAdmin}
+                  onChanged={refresh}
+                  onError={setActionError}
+                />
+              ))}
+            </ul>
+          )}
+          {isAdmin && <AddStationForm onChanged={refresh} onError={setActionError} />}
         </section>
 
         {/* Out-of-service hydrants — red is reserved for exactly this */}
@@ -226,17 +345,43 @@ export function StationScreen() {
             {roster.map((m) => (
               <li
                 key={m.id}
-                className="flex items-center gap-3 border-b border-night-700 bg-night-800 px-4 py-3 last:border-b-0"
+                className="flex flex-wrap items-center gap-3 border-b border-night-700 bg-night-800 px-4 py-3 last:border-b-0"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-night-700 font-display text-sm font-semibold uppercase text-ash-300">
                   {initials(m.display_name)}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-ash-100">
-                  {m.display_name?.trim() || 'Unnamed'}
-                  {m.id === profile?.id && <span className="text-ash-500"> (you)</span>}
-                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-ash-100">
+                    {m.display_name?.trim() || 'Unnamed'}
+                    {m.id === profile?.id && <span className="text-ash-500"> (you)</span>}
+                  </p>
+                  {!isAdmin && m.shift_id && (
+                    <p className="truncate text-sm text-ash-500">{shiftLabel(m.shift_id)}</p>
+                  )}
+                </div>
+                {isAdmin && (
+                  <select
+                    value={m.shift_id ?? ''}
+                    onChange={(e) => assignShift(m.id, e.target.value || null)}
+                    aria-label={`Shift for ${m.display_name ?? 'member'}`}
+                    className="min-h-10 max-w-44 shrink-0 rounded-md border border-night-600 bg-night-900 px-2 text-sm text-ash-100 focus:border-hiviz-400 focus:outline-none"
+                  >
+                    <option value="">No shift</option>
+                    {stations.map((st) => (
+                      <optgroup key={st.id} label={st.name}>
+                        {shifts
+                          .filter((s) => s.station_id === st.id)
+                          .map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                )}
                 <span
-                  className={`font-display text-xs font-semibold uppercase tracking-widest ${
+                  className={`shrink-0 font-display text-xs font-semibold uppercase tracking-widest ${
                     m.role === 'admin' ? 'text-hiviz-400' : 'text-ash-500'
                   }`}
                 >
@@ -254,6 +399,136 @@ export function StationScreen() {
         </section>
       </div>
     </div>
+  )
+}
+
+function StationCard({
+  station,
+  shifts,
+  roster,
+  isAdmin,
+  onChanged,
+  onError,
+}: {
+  station: StationRow
+  shifts: ShiftRow[]
+  roster: RosterRow[]
+  isAdmin: boolean
+  onChanged: () => Promise<void>
+  onError: (msg: string | null) => void
+}) {
+  const [shiftName, setShiftName] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function addShift(e: FormEvent) {
+    e.preventDefault()
+    if (!shiftName.trim()) return
+    setBusy(true)
+    onError(null)
+    const { error } = await supabase
+      .from('shifts')
+      .insert({ station_id: station.id, name: shiftName.trim() })
+    setBusy(false)
+    if (error) {
+      onError(
+        error.code === '23505'
+          ? `${station.name} already has a shift named "${shiftName.trim()}".`
+          : error.message,
+      )
+    } else {
+      setShiftName('')
+      await onChanged().catch(() => {})
+    }
+  }
+
+  return (
+    <li className="rounded-lg border border-night-700 bg-night-800 px-4 py-4">
+      <p className="font-display text-lg font-semibold uppercase tracking-wide text-ash-100">
+        {station.name}
+      </p>
+      {shifts.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {shifts.map((s) => {
+            const count = roster.filter((m) => m.shift_id === s.id).length
+            return (
+              <span key={s.id} className="rounded-md bg-night-700 px-2.5 py-1 text-sm text-ash-300">
+                {s.name}
+                <span className="text-ash-500"> · {count}</span>
+              </span>
+            )
+          })}
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-ash-500">No shifts yet.</p>
+      )}
+      {isAdmin && (
+        <form onSubmit={addShift} className="mt-3 flex gap-2">
+          <input
+            value={shiftName}
+            onChange={(e) => setShiftName(e.target.value)}
+            placeholder="A Shift"
+            aria-label={`New shift name for ${station.name}`}
+            className="min-h-10 min-w-0 flex-1 rounded-md border border-night-600 bg-night-900 px-3 text-sm text-ash-100 placeholder:text-night-600 focus:border-hiviz-400 focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={busy || !shiftName.trim()}
+            className="min-h-10 shrink-0 rounded-md border border-night-600 px-4 font-display text-sm font-semibold uppercase tracking-wide text-ash-300 hover:border-hiviz-400 hover:text-hiviz-400 disabled:opacity-50"
+          >
+            Add shift
+          </button>
+        </form>
+      )}
+    </li>
+  )
+}
+
+function AddStationForm({
+  onChanged,
+  onError,
+}: {
+  onChanged: () => Promise<void>
+  onError: (msg: string | null) => void
+}) {
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function add(e: FormEvent) {
+    e.preventDefault()
+    if (!name.trim()) return
+    setBusy(true)
+    onError(null)
+    const { error } = await supabase.from('stations').insert({ name: name.trim() })
+    setBusy(false)
+    if (error) {
+      onError(
+        error.code === '23505'
+          ? `A station named "${name.trim()}" already exists.`
+          : error.message,
+      )
+    } else {
+      setName('')
+      await onChanged().catch(() => {})
+    }
+  }
+
+  return (
+    <form onSubmit={add} className="mt-3 flex gap-2">
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Station 1"
+        aria-label="New station name"
+        className="min-h-12 min-w-0 flex-1 rounded-md border border-dashed border-night-600 bg-night-900 px-4 text-ash-100 placeholder:text-night-600 focus:border-hiviz-400 focus:outline-none"
+      />
+      <button
+        type="submit"
+        disabled={busy || !name.trim()}
+        className="min-h-12 shrink-0 rounded-md bg-hiviz-400 px-5 font-display text-sm font-semibold uppercase tracking-wide text-night-950 disabled:opacity-50"
+      >
+        Add station
+      </button>
+    </form>
   )
 }
 
