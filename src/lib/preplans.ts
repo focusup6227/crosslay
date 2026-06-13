@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import { geomFromLngLat, type LngLat } from './geo'
+import { geomFromLngLat, lngLatFromGeom, type LngLat } from './geo'
 import type { Contact, Preplan, PreplanDocument, PreplanPhoto } from './types'
 
 export interface PreplanInput {
@@ -80,6 +80,32 @@ export async function searchPreplans(query: string, limit = 25): Promise<Preplan
 export async function deletePreplan(id: string): Promise<void> {
   const { error } = await supabase.from('preplans').delete().eq('id', id)
   if (error) throw error
+}
+
+export interface PreplanPin {
+  id: string
+  address: string
+  building_name: string | null
+  lng: number
+  lat: number
+}
+
+/** All located preplans for the map. Unlocated preplans (no geom) are skipped. */
+export async function listPreplanPins(): Promise<PreplanPin[]> {
+  const { data, error } = await supabase
+    .from('preplans')
+    .select('id,address,building_name,geom')
+  if (error) throw error
+  const rows = (data ?? []) as Array<{
+    id: string
+    address: string
+    building_name: string | null
+    geom: unknown
+  }>
+  return rows.flatMap((r) => {
+    const ll = lngLatFromGeom(r.geom)
+    return ll ? [{ id: r.id, address: r.address, building_name: r.building_name, ...ll }] : []
+  })
 }
 
 // ---------- Documents ----------

@@ -18,7 +18,10 @@ import {
   listDocuments,
   listPhotos,
 } from '../lib/preplans'
+import { nearestHydrants, type NearestHydrant } from '../lib/hydrants'
+import { FLOW_COLORS, FLOW_UNKNOWN, OOS_COLOR } from '../lib/mapStyle'
 import { lngLatFromGeom } from '../lib/geo'
+import type { FlowClass } from '../lib/types'
 import {
   PDF_BUCKET,
   PHOTO_BUCKET,
@@ -46,6 +49,7 @@ export function PreplanDetail() {
   const [preplan, setPreplan] = useState<Preplan | null>(null)
   const [docs, setDocs] = useState<SignedDoc[]>([])
   const [photos, setPhotos] = useState<SignedPhoto[]>([])
+  const [nearest, setNearest] = useState<NearestHydrant[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -72,6 +76,9 @@ export function PreplanDetail() {
       ),
     )
     pushRecent({ id: plan.id, address: plan.address, building_name: plan.building_name })
+
+    // Nearest hydrants only make sense once the preplan has a location.
+    setNearest(lngLatFromGeom(plan.geom) ? await nearestHydrants(plan.id) : [])
   }, [id])
 
   useEffect(() => {
@@ -231,6 +238,42 @@ export function PreplanDetail() {
           >
             Open in map
           </a>
+        </Section>
+      )}
+
+      {/* Nearest hydrants */}
+      {point && (
+        <Section title="Nearest hydrants">
+          {nearest.length === 0 ? (
+            <p className="text-ash-500">No hydrants in this department yet.</p>
+          ) : (
+            <ul className="divide-y divide-night-700 overflow-hidden rounded-md border border-night-700">
+              {nearest.map((h) => {
+                const oos = h.status === 'out_of_service'
+                const color = oos
+                  ? OOS_COLOR
+                  : h.flow_class
+                    ? FLOW_COLORS[h.flow_class as FlowClass]
+                    : FLOW_UNKNOWN
+                return (
+                  <li key={h.id} className="flex items-center gap-3 bg-night-800 px-4 py-3">
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: color }}
+                      aria-hidden
+                    />
+                    <span className="font-semibold text-ash-100">{Math.round(h.distance_ft)} ft</span>
+                    <span className="text-ash-300">
+                      {h.flow_gpm != null ? `${h.flow_gpm} gpm` : 'flow unknown'}
+                    </span>
+                    {oos && (
+                      <span className="ml-auto font-semibold uppercase text-oos-400">Out of service</span>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </Section>
       )}
 

@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useAuth } from '../auth/AuthProvider'
 import { geocode, lngLatFromGeom, type LngLat } from '../lib/geo'
+
+const MapPicker = lazy(() => import('./MapPicker').then((m) => ({ default: m.MapPicker })))
 import {
   addDocument,
   createPreplan,
@@ -90,6 +92,9 @@ export function PreplanForm({ mode, initial, onSaved, onCancel }: Props) {
     })
   }
 
+  const validPoint =
+    point && Number.isFinite(point.lat) && Number.isFinite(point.lng) ? point : null
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (!address.trim()) {
@@ -99,8 +104,6 @@ export function PreplanForm({ mode, initial, onSaved, onCancel }: Props) {
     setError(null)
     setBusy(true)
     try {
-      const validPoint =
-        point && Number.isFinite(point.lat) && Number.isFinite(point.lng) ? point : null
       const input: PreplanInput = {
         address,
         building_name: buildingName,
@@ -198,8 +201,15 @@ export function PreplanForm({ mode, initial, onSaved, onCancel }: Props) {
           </div>
         </div>
         <p className="mt-2 text-sm text-ash-500">
-          Drag-to-place on the map arrives in Phase 3. For now, geocode or enter coordinates.
+          Geocode the address, tap the map, or drag the pin to fine-tune.
         </p>
+        <div className="mt-3">
+          <Suspense
+            fallback={<div className="h-60 w-full rounded-md border border-night-600 bg-night-800" />}
+          >
+            <MapPicker point={validPoint} onChange={(p) => setPoint(p)} />
+          </Suspense>
+        </div>
       </div>
 
       {/* Building name + occupancy */}

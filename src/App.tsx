@@ -1,14 +1,17 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthProvider'
 import { SignIn } from './auth/SignIn'
 import { Onboarding } from './auth/Onboarding'
 import { AppShell } from './shell/AppShell'
-import { MapScreen } from './screens/MapScreen'
 import { SearchScreen } from './screens/SearchScreen'
 import { AddScreen } from './screens/AddScreen'
 import { EditScreen } from './screens/EditScreen'
 import { PreplanDetail } from './screens/PreplanDetail'
 import { supabaseConfigError } from './lib/supabase'
+
+// maplibre is heavy — keep it out of the app-shell/auth/search bundle.
+const MapScreen = lazy(() => import('./screens/MapScreen').then((m) => ({ default: m.MapScreen })))
 
 function ConfigNotice({ message }: { message: string }) {
   return (
@@ -41,16 +44,20 @@ function Gate() {
   if (!profile?.department_id) return <Onboarding />
 
   return (
-    <Routes>
-      <Route element={<AppShell />}>
-        <Route path="/map" element={<MapScreen />} />
-        <Route path="/search" element={<SearchScreen />} />
-        <Route path="/add" element={<AddScreen />} />
-        <Route path="/preplan/:id" element={<PreplanDetail />} />
-        <Route path="/preplan/:id/edit" element={<EditScreen />} />
-        <Route path="*" element={<Navigate to="/map" replace />} />
-      </Route>
-    </Routes>
+    <Suspense
+      fallback={<div className="flex min-h-dvh items-center justify-center text-ash-500">Loading…</div>}
+    >
+      <Routes>
+        <Route element={<AppShell />}>
+          <Route path="/map" element={<MapScreen />} />
+          <Route path="/search" element={<SearchScreen />} />
+          <Route path="/add" element={<AddScreen />} />
+          <Route path="/preplan/:id" element={<PreplanDetail />} />
+          <Route path="/preplan/:id/edit" element={<EditScreen />} />
+          <Route path="*" element={<Navigate to="/map" replace />} />
+        </Route>
+      </Routes>
+    </Suspense>
   )
 }
 

@@ -1,10 +1,10 @@
 # HANDOFF — Crosslay
 
-_Last updated: 2026-06-10 (session 2)_
+_Last updated: 2026-06-13 (session 2)_
 
 ## Current state
 
-**Phase 1 (Foundation) + Phase 2 (Preplans) are code-complete; awaiting Supabase project + user testing.**
+**Phases 1–3 (Foundation, Preplans, Map) are code-complete; awaiting Supabase project + user testing.**
 
 - `supabase/migrations/0001_init.sql` — full schema, RLS, triggers, onboarding RPCs, storage buckets + policies. **Not yet applied** — needs a Supabase project.
 - Vite + React + TS + Tailwind v4 scaffold; `npm run build` passes.
@@ -21,6 +21,17 @@ _Last updated: 2026-06-10 (session 2)_
 - **Search** (`src/screens/SearchScreen.tsx`): debounced (250ms) type-ahead `ILIKE` over address + building name; recently-viewed list (localStorage, `src/lib/recents.ts`) when the box is empty.
 - **Storage** (`src/lib/storage.ts`): uploads to `preplan-pdfs`/`preplan-photos` under `{department_id}/{preplan_id}/{uuid}-{name}`; columns store the object **path**, views render short-lived (1h) **signed URLs** on demand (offline-cache-friendly later).
 - **New dependency:** `react-pdf` (pre-approved as "pdf.js (or react-pdf)").
+
+### Phase 3 — Map (session 2)
+
+- **Map screen** (`src/screens/MapScreen.tsx`): MapLibre GL with free OSM raster tiles (`src/lib/mapStyle.ts`; no Mapbox token). Preplan pins are **clustered** (tap cluster → zoom, tap pin → bottom-sheet preview → open preplan). **Locate-me** via `GeolocateControl`. Auto-fits to the department's preplans on first load.
+- **Hydrant layer**: toggleable, circle color-coded by NFPA flow class (gray when unknown); **out-of-service renders red with a white ring** regardless of class. Tap a hydrant → sheet with flow/status + **Mark out of service / back in service** + note (any member; DB trigger enforces members only touch status fields).
+- **Manual hydrant drop (admin)** — *beyond the literal spec, added so the hydrant layer is testable before Phase 4 import.* Admin taps "+ Hydrant", optionally enters gpm/main size, taps the map to place (`source='manual'`). Trim this if unwanted.
+- **Nearest hydrants on the detail screen** via the existing `nearest_hydrants` RPC — 5 closest with distance in feet + flow-class dot + OOS flag.
+- **Draggable pin in the create/edit form** (`src/components/MapPicker.tsx`) — the deferred Phase 2 item. Geocode/manual-latlng center it; tap the map or drag the marker to fine-tune.
+- **Bundle**: maplibre (~273 kB gzip) and react-pdf (~124 kB gzip) are both lazy-loaded; the app-shell/auth/search core bundle is ~75 kB gzip.
+- **New dependency:** `maplibre-gl` (pre-approved).
+- **Tiles caveat:** `tile.openstreetmap.org` is fine for dev / a single department; a multi-department rollout needs a proper tile provider (OSM's tile policy + rate limits).
 
 ### ⚠️ To verify during live testing (couldn't test without a Supabase project)
 
@@ -71,7 +82,6 @@ _Last updated: 2026-06-10 (session 2)_
 
 ## What's next
 
-- **Phase 3 (Map)**: MapLibre map with preplan pins (tap → bottom-sheet preview → detail), clustering, locate-me; toggleable hydrant layer color-coded by flow class (OOS = slashed/red); nearest-5 hydrants on preplan detail via the existing `nearest_hydrants` RPC. This is also where the form's **drag-to-place pin** lands (deferred from Phase 2).
 - **Phase 4 (Importers)**: bulk preplan CSV+PDF import; hydrant GeoJSON + OSM-bbox import (see hydrant research above).
 - **Phase 5 (Polish)**: PWA manifest + service worker, empty/loading/error states, dev seed script.
 - Need from owner: Supabase project URL + anon key (locally **and** in Vercel); confirmation the Phase 1 + Phase 2 flows work on his phone (see "To verify during live testing" above).
